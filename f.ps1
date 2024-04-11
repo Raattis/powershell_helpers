@@ -6,14 +6,31 @@ param (
     [string]$pattern,
 	
     [Parameter(Mandatory = $false)]
-    [string]$exclude = "*\build\*",
+    [string[]]$exclude = @("*\.git\*", "*\build\*", "*\.vs\*"),
 
     [Parameter(Mandatory = $false)]
     [string]$path = "."
 )
 
+$exclude_root = foreach($ex in $exclude) { $ex -replace "\*\\" -replace "\\\*" }
+$paths = ls $path -force -exclude $exclude_root
+$items = foreach ($p in $paths) {
+	if (Test-Path $p -PathType Leaf) {
+		if ([string]::IsNullOrWhiteSpace($filter) -or $p -like $filter) {
+			$p
+		}
+	} else {
+		ls $p -force -r -filter $filter -exclude $exclude
+	}
+}
+
+$items = $items | where-object{ Test-Path $_.fullname -PathType Leaf}
+foreach ($excl in $exclude) {
+	$items = $items | where-object{ $_.fullname -notlike $excl }
+}
+
 if (-not [string]::IsNullOrWhiteSpace($pattern)) {
-	ls $path -r $filter | ?{ $_.fullname -notlike $exclude } | sls $pattern
+	$items | sls $pattern | foreach { echo $_ }
 } else {
-	ls $path -r $filter | ?{ $_.fullname -notlike $exclude } | select fullname | foreach { $_.fullname }
+	$items | foreach { $_.fullname }
 }

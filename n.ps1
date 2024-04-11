@@ -3,21 +3,13 @@ param (
     [string]$filename,
 
     [Parameter(Position = 1, Mandatory = $false)]
-    [string]$line,
-	
-    [Parameter(Mandatory = $false)]
-    [string]$exclude = "*\build\*",
-
-    [Parameter(Mandatory = $false)]
-    [string]$path = "."
+    [string]$line
 )
 
 $splitresults = $filename -split ":"
 $filename = $splitresults[0]
-if ($filename.length -eq 1)
-{
-	if ($splitresults[1] -like "/*" -or $splitresults[1] -like "\*")
-	{
+if ($filename.length -eq 1) {
+	if ($splitresults[1] -like "/*" -or $splitresults[1] -like "\*") {
 		$filename = $splitresults[0] + ":" + $splitresults[1]
 		$splitresults[1] = $splitresults[2]
 	}
