@@ -9,7 +9,13 @@ param (
 	[string[]]$exclude = @("*\.git\*", "*\build\*", "*\.vs\*", "*\__pycache__\*"),
 
 	[Parameter(Mandatory = $false)]
-	[string]$path = "."
+	[string]$path = ".",
+
+	[Parameter(Mandatory = $false)]
+	[switch]$index,
+
+	[Parameter(Mandatory = $false)]
+	[int]$open = 0
 )
 
 $path = $path.TrimEnd(@("\", "/"))
@@ -87,6 +93,32 @@ function ClearProgress {
 $global:hits = 0
 $global:files = 0
 
+function OpenAtLine {
+	param (
+		[string]$line
+	)
+
+	$parts = $line -split ":"
+	$filename = ""
+	$line = ""
+	if ($parts[1] -like "\*") {
+		$filename = $parts[0] + ":" + $parts[1]
+		$line = $parts[2]
+	} else {
+		$filename = $parts[0]
+		$line = $parts[1]
+	}
+	$args = $filename + ":" + $line
+	& "e" $args
+}
+
+function OpenFile {
+	param (
+		[string]$filepath
+	)
+	& "e" $filepath
+}
+
 function Output {
 	param (
 		$item
@@ -100,10 +132,21 @@ function Output {
 
 	if (-not [string]::IsNullOrWhiteSpace($pattern)) {
 		$old_hits = $global:hits
-		$item | sls $pattern | foreach {
-			ClearProgress
-			$global:hits += 1
-			echo "$_"
+		if ($index -or ($open -ne 0)){
+			$item | sls $pattern | foreach {
+				ClearProgress
+				$global:hits += 1
+				echo "[$($global:hits)] $_"
+				if ($open -eq $global:hits) {
+					OpenAtLine($_)
+				}
+			}
+		} else {
+			$item | sls $pattern | foreach {
+				ClearProgress
+				$global:hits += 1
+				echo "$_"
+			}
 		}
 		if ($old_hits -lt $global:hits) {
 			$global:files += 1
@@ -112,10 +155,21 @@ function Output {
 		ClearProgress
 		$item | cat
 	} else {
-		$item | foreach {
-			ClearProgress
-			$global:files += 1
-			echo "$_"
+		if ($index -or ($open -ne 0)) {
+			$item | foreach {
+				ClearProgress
+				$global:files += 1
+				echo "[$($global:files)] $_"
+				if ($open -eq $global:files) {
+					OpenFile($_)
+				}
+			}
+		} else {
+			$item | foreach {
+				ClearProgress
+				$global:files += 1
+				echo "$_"
+			}
 		}
 	}
 }
