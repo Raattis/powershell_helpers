@@ -3,15 +3,13 @@ param (
 	[int]$open = -1
 )
 
-$prev_run = Get-History | Where-Object{ $_.CommandLine -like "f *" -or $_.CommandLine -like "f *" } | Select-Object -Last 1 | foreach { $_.CommandLine }
+$prev_run = Get-History | Where-Object{ $_.CommandLine -like "f *" -or $_.CommandLine -eq "f" } | Select-Object -Last 1 | foreach { $_.CommandLine }
 
 if ([string]::IsNullOrWhiteSpace($prev_run)) {
-	$prev_run = "f -index"
+	$prev_run = "f -open 1"
 } elseif ($open -lt 1) {
-	if ($prev_run -like "f *-open *" ) {
+	if (($prev_run -like "f *-open *") -or ($prev_run -like "f *-o *")) {
 		# nop
-	} elseif ($open -eq 0 -and $prev_run -like "f *-index*") {
-		$prev_run = $prev_run + " -index"
 	} else {
 		$prev_run = $prev_run + " -open 1"
 	}

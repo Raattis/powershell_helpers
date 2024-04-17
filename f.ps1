@@ -20,7 +20,7 @@ param (
 
 	[Alias("i")]
 	[Parameter(Mandatory = $false)]
-	[switch]$index,
+	[bool]$index = $true,
 
 	[Alias("o")]
 	[Parameter(Mandatory = $false)]
@@ -70,10 +70,13 @@ function OpenAtLine {
 
 function OpenFile {
 	param (
-		[string]$filepath
+		[string]$filepath,
+		[bool]$recurse
 	)
 	& "e" $filepath
 }
+
+$global:old = @{}
 
 function Output {
 	param ($item)
@@ -101,6 +104,12 @@ function Output {
 		return
 	}
 
+	if ($global:old.ContainsKey($item.fullname)) {
+		#echo "old: $item.fullname"
+		return
+	}
+	$global:old.Add($item.fullname, 1)
+
 	if (-not [string]::IsNullOrWhiteSpace($pattern)) {
 		$old_hits = $global:hits
 		if ($index -or ($open -ne 0)){
@@ -124,7 +133,9 @@ function Output {
 		}
 	} elseif (-not $recurse) {
 		ClearProgress
+		$global:files += 1
 		if ($open -eq 0) {
+			write-host -NoNewline "[$($global:files)] "
 			$item | cat
 		} else {
 			OpenAtLine($item.fullname + ":" + $open)
@@ -155,11 +166,30 @@ function Output {
 
 $path = $path.TrimEnd(@("\", "/"))
 
-$recurse = $true
+for (($i = 0); $i -lt $path_filters.Length; $i++) {
+	if ($path_filters[$i] -notmatch ".*\*.*") {
+		$path_filters[$i] = "*" + $path_filters[$i] + "*"
+	}
+}
+
+$global:hits = 0
+$global:files = 0
+
+$default_excludes = @("*\.git\*", "*\build\*", "*\.vs\*", "*\__pycache__\*", "*\.*cache*\*")
+$combined_excludes = $default_excludes + $user_excludes
+
+if ($no_default_excludes) {
+	$combined_excludes = @("dummy_exclude_value") + $user_excludes
+}
+
+$exclude_root = foreach($ex in $combined_excludes) { $ex -replace "\*\\" -replace "\\\*" }
+$paths = ls $path -force -exclude $exclude_root
+$recurses = @($true) * $filters.Length
 
 for (($i = 0); $i -lt $filters.Length; $i++)
 {
 	$filter = $filters[$i]
+	$exact = $false
 
 	if (($filter -match ".*[\\/].*")) {
 		# filter is a path
@@ -175,7 +205,7 @@ for (($i = 0); $i -lt $filters.Length; $i++)
 		}
 		elseif (Test-Path $filter_file -PathType Leaf) {
 			# filter:".\path\to\file.ext"
-			$recurse = $false
+			$recurses[$i] = $false
 			$exact = $true
 			$path = split-path -parent $filter_file
 			$filter = split-path -leaf $filter
@@ -195,39 +225,34 @@ for (($i = 0); $i -lt $filters.Length; $i++)
 		# filter contains a * or ends in !, so treat it as a non-substring search
 		$filter = $filter -replace "!"
 	} elseif (-not $exact) {
-		# the default filter is a substring search
-		$filter = "*" + $filter + "*"
+		if ($filter -like ".*" -and $filter -ne ".") {
+			# extension filter
+			$filter = "*" + $filter
+		} else {
+			# the default filter is a substring search
+			$filter = "*" + $filter + "*"
+		}
 	}
 
 	if (-not [string]::IsNullOrWhiteSpace($pattern)) {
-		if ($recurse) {
+		if ($recurses[$i]) {
 			echo "Finding '$pattern' in files matching '$filter' under '$(Resolve-Path $path)'."
 		} else {
 			echo "Finding '$pattern' in '$path\$filter'."
 		}
-	} elseif ($recurse) {
+	} elseif ($recurses[$i]) {
 		echo "Searching for files matching '$filter' under '$path'."
 	} else {
 		#echo "Splatting '$path\$filter'"
 	}
+
 	$filters[$i] = $filter
 }
 
-$global:hits = 0
-$global:files = 0
-
-$default_excludes = @("*\.git\*", "*\build\*", "*\.vs\*", "*\__pycache__\*", "*\.*cache*\*")
-$combined_excludes = $default_excludes + $user_excludes
-
-if ($no_default_excludes) {
-	$combined_excludes = @("dummy_exclude_value") + $user_excludes
-}
-echo "combined_excludes: $combined_excludes"
-
-$exclude_root = foreach($ex in $combined_excludes) { $ex -replace "\*\\" -replace "\\\*" }
-$paths = ls $path -force -exclude $exclude_root
-foreach ($filter in $filters) {
-	echo "filter $filter"
+for (($i = 0); $i -lt $filters.Length; $i++)
+{
+	$filter = $filters[$i]
+	$recurse = $recurses[$i]
 	foreach ($p in $paths) {
 		if (Test-Path $p -PathType Leaf) {
 			if ((-not [string]::IsNullOrWhiteSpace($filter)) -and ((split-path -leaf $p) -like $filter)) {
@@ -241,7 +266,7 @@ foreach ($filter in $filters) {
 }
 
 ClearProgress
-if ($recurse) {
+if ($recurse -or $filters.Length -gt 1) {
 	if ([string]::IsNullOrWhiteSpace($pattern)) {
 		echo "Matched $global:files files"
 	} else {
