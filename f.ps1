@@ -1,12 +1,13 @@
 param (
+	[Alias("filter")]
 	[Parameter(Position = 0, Mandatory = $false)]
-	[string]$filter = "*",
+	[string[]]$filters = @("*"),
 
 	[Parameter(Position = 1, Mandatory = $false)]
 	[string]$pattern,
 
 	[Parameter(Mandatory = $false)]
-	[string[]]$exclude = @("*\.git\*", "*\build\*", "*\.vs\*", "*\__pycache__\*"),
+	[string[]]$exclude = @("*\.git\*", "*\build\*", "*\.vs\*", "*\__pycache__\*", "*\.*cache*\*"),
 
 	[Parameter(Mandatory = $false)]
 	[string]$path = ".",
@@ -17,60 +18,6 @@ param (
 	[Parameter(Mandatory = $false)]
 	[int]$open = 0
 )
-
-$path = $path.TrimEnd(@("\", "/"))
-
-$recurse = $true
-if (($filter -match ".*[\\/].*")) {
-	# filter is a path
-	$filter_file = $path + "\" + $filter.TrimStart(".\").TrimEnd("./").TrimEnd("!")
-	if ((split-path -leaf $filter) -match ".*[*!].*") {
-		# filter:".\path\to\*.ext"
-		$path = split-path -parent $filter_file
-		if (-not (Test-Path $path -PathType Container)) {
-			Write-Error -Message "ERROR: '$path' isn't a folder." -Category InvalidArgument
-			exit 1
-		}
-		$filter = split-path -leaf $filter
-	}
-	elseif (Test-Path $filter_file -PathType Leaf) {
-		# filter:".\path\to\file.ext"
-		$recurse = $false
-		$exact = $true
-		$path = split-path -parent $filter_file
-		$filter = split-path -leaf $filter
-	}
-	elseif (Test-Path $filter_file -PathType Container) {
-		# filter:".\path\to\"
-		$path = $filter_file
-		$filter = "*"
-	}
-	else {
-		Write-Error -Message "ERROR: '$filter_file' doesn't exist." -Category InvalidArgument
-		exit 1
-	}
-}
-
-if (($filter -like "*!") -or ($filter -like ("*" + [wildcardpattern]::Escape("*") + "*"))) {
-	# filter contains a * or ends in !, so treat it as a non-substring search
-	$filter = $filter -replace "!"
-} elseif (-not $exact) {
-	# the default filter is a substring search
-	$filter = "*" + $filter + "*"
-}
-
-if (-not [string]::IsNullOrWhiteSpace($pattern)) {
-	if ($recurse) {
-		echo "Finding '$pattern' in files matching '$filter' under '$(Resolve-Path $path)'."
-	} else {
-		echo "Finding '$pattern' in '$path\$filter'."
-	}
-} elseif ($recurse) {
-	echo "Searching for files matching '$filter' under '$path'."
-} else {
-	#echo "Splatting '$path\$filter'"
-}
-
 
 function Progress {
 	param (
@@ -89,9 +36,6 @@ function Progress {
 function ClearProgress {
 	write-host -NoNewline "`r$(" " * $Host.UI.RawUI.WindowSize.Width)`r"
 }
-
-$global:hits = 0
-$global:files = 0
 
 function OpenAtLine {
 	param (
@@ -120,9 +64,11 @@ function OpenFile {
 }
 
 function Output {
-	param (
-		$item
-	)
+	param ($item)
+	if ([string]::IsNullOrWhiteSpace($item)) {
+		return
+	}
+	
 	foreach ($excl in $exclude) {
 		if ($item.fullname -like $excl) {
 			return
@@ -153,7 +99,11 @@ function Output {
 		}
 	} elseif (-not $recurse) {
 		ClearProgress
-		$item | cat
+		if ($open -eq 0) {
+			$item | cat
+		} else {
+			OpenAtLine($item.fullname + ":" + $open)
+		}
 	} else {
 		if ($index -or ($open -ne 0)) {
 			$item | foreach {
@@ -166,24 +116,93 @@ function Output {
 			}
 		} else {
 			$item | foreach {
-				ClearProgress
-				$global:files += 1
-				echo "$_"
+				if (-not [string]::IsNullOrWhiteSpace($_)) {
+					ClearProgress
+					$global:files += 1
+					echo "$_"
+				}
 			}
 		}
 	}
 }
 
+##############################################################################
+
+$path = $path.TrimEnd(@("\", "/"))
+
+$recurse = $true
+
+for (($i = 0); $i -lt $filters.Length; $i++)
+{
+	$filter = $filters[$i]
+
+	if (($filter -match ".*[\\/].*")) {
+		# filter is a path
+		$filter_file = $path + "\" + $filter.TrimStart(".\").TrimEnd("./").TrimEnd("!")
+		if ((split-path -leaf $filter) -match ".*[*!].*") {
+			# filter:".\path\to\*.ext"
+			$path = split-path -parent $filter_file
+			if (-not (Test-Path $path -PathType Container)) {
+				Write-Error -Message "ERROR: '$path' isn't a folder." -Category InvalidArgument
+				exit 1
+			}
+			$filter = split-path -leaf $filter
+		}
+		elseif (Test-Path $filter_file -PathType Leaf) {
+			# filter:".\path\to\file.ext"
+			$recurse = $false
+			$exact = $true
+			$path = split-path -parent $filter_file
+			$filter = split-path -leaf $filter
+		}
+		elseif (Test-Path $filter_file -PathType Container) {
+			# filter:".\path\to\"
+			$path = $filter_file
+			$filter = "*"
+		}
+		else {
+			Write-Error -Message "ERROR: '$filter_file' doesn't exist." -Category InvalidArgument
+			exit 1
+		}
+	}
+
+	if (($filter -like "*!") -or ($filter -like ("*" + [wildcardpattern]::Escape("*") + "*"))) {
+		# filter contains a * or ends in !, so treat it as a non-substring search
+		$filter = $filter -replace "!"
+	} elseif (-not $exact) {
+		# the default filter is a substring search
+		$filter = "*" + $filter + "*"
+	}
+
+	if (-not [string]::IsNullOrWhiteSpace($pattern)) {
+		if ($recurse) {
+			echo "Finding '$pattern' in files matching '$filter' under '$(Resolve-Path $path)'."
+		} else {
+			echo "Finding '$pattern' in '$path\$filter'."
+		}
+	} elseif ($recurse) {
+		echo "Searching for files matching '$filter' under '$path'."
+	} else {
+		#echo "Splatting '$path\$filter'"
+	}
+	$filters[$i] = $filter
+}
+
+$global:hits = 0
+$global:files = 0
+
 $exclude_root = foreach($ex in $exclude) { $ex -replace "\*\\" -replace "\\\*" }
 $paths = ls $path -force -exclude $exclude_root
-foreach ($p in $paths) {
-	if (Test-Path $p -PathType Leaf) {
-		if ([string]::IsNullOrWhiteSpace($filter) -or ((split-path -leaf $p) -like $filter)) {
-			Output($p)
+foreach ($filter in $filters) {
+	foreach ($p in $paths) {
+		if (Test-Path $p -PathType Leaf) {
+			if ((-not [string]::IsNullOrWhiteSpace($filter)) -and ((split-path -leaf $p) -like $filter)) {
+				Output($p)
+			}
+		} else {
+			Progress($p)
+			ls $p -force -Recurse:$recurse -filter $filter -exclude $exclude -file | foreach { Output($_) }
 		}
-	} else {
-		Progress($p)
-		ls $p -force -Recurse:$recurse -filter $filter -exclude $exclude -file | foreach { Output $_ }
 	}
 }
 
