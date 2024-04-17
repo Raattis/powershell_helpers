@@ -6,17 +6,29 @@ param (
 	[Parameter(Position = 1, Mandatory = $false)]
 	[string]$pattern,
 
+	[Alias("x", "exclude")]
 	[Parameter(Mandatory = $false)]
-	[string[]]$exclude = @("*\.git\*", "*\build\*", "*\.vs\*", "*\__pycache__\*", "*\.*cache*\*"),
+	[string[]]$user_excludes = @(),
 
+	[Alias("ndx")]
+	[Parameter(Mandatory = $false)]
+	[switch]$no_default_excludes,
+
+	[Alias("p")]
 	[Parameter(Mandatory = $false)]
 	[string]$path = ".",
 
+	[Alias("i")]
 	[Parameter(Mandatory = $false)]
 	[switch]$index,
 
+	[Alias("o")]
 	[Parameter(Mandatory = $false)]
-	[int]$open = 0
+	[int]$open = 0,
+
+	[Alias("pf")]
+	[Parameter(Mandatory = $false)]
+	[string[]]$path_filters = @()
 )
 
 function Progress {
@@ -68,13 +80,26 @@ function Output {
 	if ([string]::IsNullOrWhiteSpace($item)) {
 		return
 	}
-	
-	foreach ($excl in $exclude) {
+
+	Progress($item)
+	foreach ($excl in $combined_excludes) {
 		if ($item.fullname -like $excl) {
+			#echo "excluded: $item"
 			return
 		}
 	}
-	Progress($item)
+	
+	$pf_ok = $path_filters.Length -eq 0
+	foreach ($pf in $path_filters) {
+		if ($item.fullname -like $pf) {
+			$pf_ok = $true
+			break
+		}
+	}
+	if (-not $pf_ok) {
+		#echo "pf fail: $item"
+		return
+	}
 
 	if (-not [string]::IsNullOrWhiteSpace($pattern)) {
 		$old_hits = $global:hits
@@ -191,9 +216,18 @@ for (($i = 0); $i -lt $filters.Length; $i++)
 $global:hits = 0
 $global:files = 0
 
-$exclude_root = foreach($ex in $exclude) { $ex -replace "\*\\" -replace "\\\*" }
+$default_excludes = @("*\.git\*", "*\build\*", "*\.vs\*", "*\__pycache__\*", "*\.*cache*\*")
+$combined_excludes = $default_excludes + $user_excludes
+
+if ($no_default_excludes) {
+	$combined_excludes = @("dummy_exclude_value") + $user_excludes
+}
+echo "combined_excludes: $combined_excludes"
+
+$exclude_root = foreach($ex in $combined_excludes) { $ex -replace "\*\\" -replace "\\\*" }
 $paths = ls $path -force -exclude $exclude_root
 foreach ($filter in $filters) {
+	echo "filter $filter"
 	foreach ($p in $paths) {
 		if (Test-Path $p -PathType Leaf) {
 			if ((-not [string]::IsNullOrWhiteSpace($filter)) -and ((split-path -leaf $p) -like $filter)) {
@@ -201,7 +235,7 @@ foreach ($filter in $filters) {
 			}
 		} else {
 			Progress($p)
-			ls $p -force -Recurse:$recurse -filter $filter -exclude $exclude -file | foreach { Output($_) }
+			ls $p -force -Recurse:$recurse -filter $filter -exclude $combined_excludes -file | foreach { Output($_) }
 		}
 	}
 }
