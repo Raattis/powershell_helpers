@@ -1,34 +1,106 @@
+<#
+	.SYNOPSIS
+	Find files by name and content.
+
+	.DESCRIPTION
+f	Lists all files recursive starting from the current working directory.
+	Some folders are excluded from the search by default (such as .git, .vs and build). See $default_excludes in the source for the full list.
+	Use -ndx/-no_default_excludes to disable this behavior
+
+f -x Debug,Release
+	To exclude more folders
+
+f -p ../other/path
+	Changes the search root
+
+f hi
+	Filter files by substrings (automatically expands to *hi*)
+
+f .cpp
+	Filter files by extension (automatically expands to *.cpp)
+
+f .cpp,.h
+	Filter supports comma-separated lists
+
+f *test*.cpp
+	Filter supports wildcards
+
+f *
+	Matches every file
+
+f .cpp hello
+	Find every .cpp file containing hello and output every hit line
+
+f .cpp hello.*world
+	Content search uses regex (not wildcards)
+
+f * "hello|hiya"
+f * hello`|hiya
+f * `"hello
+f * "`"hello"
+	Remember to (") quote and/or (`) escape any special characters
+
+f .cpp hello.*world -open 1
+	Open the first hit at the correct line
+
+f -pf \my_project\,\my_tests\
+	Filter based on full path
+
+help f -detailed
+help f -full
+	For more info on parameters
+
+	.LINK
+	Repo: https://github.com/Raattis/powershell_helpers
+#>
+
 param (
 	[Alias("filter")]
 	[Parameter(Position = 0, Mandatory = $false)]
-	[string[]]$filters = @("*"),
+	[string[]]
+	# Filename filter (supports wildcards and comma-separated list)
+	$filters = @("*"),
 
 	[Parameter(Position = 1, Mandatory = $false)]
-	[string]$pattern,
-
-	[Alias("x", "exclude")]
-	[Parameter(Mandatory = $false)]
-	[string[]]$user_excludes = @(),
+	[string]
+	# Match patterns in file contents (uses regex, use backtick (`) to escape quotes ("))
+	$pattern,
 
 	[Alias("ndx")]
 	[Parameter(Mandatory = $false)]
-	[switch]$no_default_excludes,
+	[switch]
+	# Disable default excludes (*\.git\*, *\build\*, *\.vs\*, *\__pycache__\*, *\.*cache*\*)
+	$no_default_excludes,
+
+	[Alias("x", "exclude")]
+	[Parameter(Mandatory = $false)]
+	[string[]]
+	# Exclude some directories manually (f.ex. "*\Debug\*,*\Release\*")
+	$user_excludes = @(),
 
 	[Alias("p")]
 	[Parameter(Mandatory = $false)]
-	[string]$path = ".",
+	[string]
+	# Set the root path (defaults to current working directory)
+	$path = ".",
 
 	[Alias("i")]
 	[Parameter(Mandatory = $false)]
-	[bool]$index = $true,
+	[bool]
+	# Show indices in results, on by default. -index:0 to disable
+	$index = $true,
 
 	[Alias("o")]
 	[Parameter(Mandatory = $false)]
-	[int]$open = 0,
+	[int]
+	# Open the nth result in Notepad++
+	$open = 0,
 
 	[Alias("pf")]
 	[Parameter(Mandatory = $false)]
-	[string[]]$path_filters = @()
+	[string[]]
+	# Filter that matches the path. Use comma-separated list for a logical or filter
+	$path_filters = @()
 )
 
 function Progress {
@@ -70,8 +142,7 @@ function OpenAtLine {
 
 function OpenFile {
 	param (
-		[string]$filepath,
-		[bool]$recurse
+		[string]$filepath
 	)
 	& "e" $filepath
 }
@@ -91,7 +162,7 @@ function Output {
 			return
 		}
 	}
-	
+
 	$pf_ok = $path_filters.Length -eq 0
 	foreach ($pf in $path_filters) {
 		if ($item.fullname -like $pf) {
@@ -182,8 +253,6 @@ if ($no_default_excludes) {
 	$combined_excludes = @("dummy_exclude_value") + $user_excludes
 }
 
-$exclude_root = foreach($ex in $combined_excludes) { $ex -replace "\*\\" -replace "\\\*" }
-$paths = ls $path -force -exclude $exclude_root
 $recurses = @($true) * $filters.Length
 
 for (($i = 0); $i -lt $filters.Length; $i++)
@@ -238,16 +307,18 @@ for (($i = 0); $i -lt $filters.Length; $i++)
 		if ($recurses[$i]) {
 			echo "Finding '$pattern' in files matching '$filter' under '$(Resolve-Path $path)'."
 		} else {
-			echo "Finding '$pattern' in '$path\$filter'."
+			echo "Finding '$pattern' in '$(Resolve-Path $path)\$filter'."
 		}
 	} elseif ($recurses[$i]) {
-		echo "Searching for files matching '$filter' under '$path'."
+		echo "Searching for files matching '$filter' under '$(Resolve-Path $path)'."
 	} else {
 		#echo "Splatting '$path\$filter'"
 	}
-
 	$filters[$i] = $filter
 }
+
+$exclude_root = foreach($ex in $combined_excludes) { $ex -replace "\*\\" -replace "\\\*" }
+$paths = ls $path -force -exclude $exclude_root
 
 for (($i = 0); $i -lt $filters.Length; $i++)
 {
