@@ -32,9 +32,9 @@
 * Hint: Because the `f`ind is rerun every time, if you are doing manual edits to the hits and saving them so that they don't match the `f`ind anymore, you can just rerun the `re` to edit the next result
 
 ## `help`
-* See `help f/e/re` or source code for more arguments and switches
+* See `help e/f/re` or source code for more arguments and switches
 * `e [-filename] <string> [[-line] <string>]`
-* `f [[-filters] <string[]>] [[-pattern] <string>] [-user_excludes|x <string[]>] [-no_default_excludes|ndx] [-p[ath] <string>] [-o[pen] <int>] [-path_filters|pf <string[]>]`
+* `f [[-filters] <string[]>] [[-pattern] <string>] [-user_excludes|x <string[]>] [-no_default_excludes|ndx] [-path|p <string>] [-open|o <int>] [-path_filters|pf <string[]>]`
 * `re [[-open] <int>]`
 
 # Other stuff
