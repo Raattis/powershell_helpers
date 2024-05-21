@@ -26,7 +26,7 @@ def get_file():
 					header = line[line.index("/")+1:]
 				elif line.startswith("@@ "):
 					l = line.split("@@")[1]
-					lno = int(l[l.index("+")+1:l.rindex(",")])
+					lno = int(l.split("+")[1].split(",")[0])
 				elif lno != -1:
 					if line.startswith("-") or line.startswith("+"):
 						results.append((header, lno, line))
