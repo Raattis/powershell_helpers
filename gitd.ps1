@@ -1,1 +1,1 @@
-& python typo_fix.py git $MyInvocation.Line
+& typo_fix.ps1 git $MyInvocation.Line
