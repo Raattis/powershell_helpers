@@ -100,7 +100,25 @@ param (
 	[Parameter(Mandatory = $false)]
 	[string[]]
 	# Filter that matches the path. Use comma-separated list for a logical or filter
-	$path_filters = @()
+	$path_filters = @(),
+
+	[Alias("c", "fc")]
+	[Parameter(Mandatory = $false)]
+	[switch]
+	# Make content search case sensitive
+	$case_sensitive_pattern,
+
+	[Alias("pfc")]
+	[Parameter(Mandatory = $false)]
+	[switch]
+	# Make file path matching case sensitive
+	$case_sensitive_path_filter,
+
+	[Alias("nfc")]
+	[Parameter(Mandatory = $false)]
+	[switch]
+	# Make file name matching case sensitive
+	$case_sensitive_name_filter
 )
 
 function Progress {
@@ -148,6 +166,8 @@ function OpenFile {
 }
 
 $global:old = @{}
+$name_like_operator = if ($case_sensitive_name_filter) { { param($a, $b) $a -clike $b } }else { { param($a, $b) $a -ilike $b } }
+$pf_like_operator = if ($case_sensitive_path_filter) { { param($a, $b) $a -clike $b } }else { { param($a, $b) $a -ilike $b } }
 
 function Output {
 	param ($item)
@@ -156,6 +176,11 @@ function Output {
 	}
 
 	Progress($item)
+
+	if (-not (&$name_like_operator $item.name $filter)) {
+		return
+	}
+
 	foreach ($excl in $combined_excludes) {
 		if ($item.fullname -like $excl) {
 			#echo "excluded: $item"
@@ -165,7 +190,7 @@ function Output {
 
 	$pf_ok = $path_filters.Length -eq 0
 	foreach ($pf in $path_filters) {
-		if ($item.fullname -like $pf) {
+		if (&$pf_like_operator $item.fullname $pf) {
 			$pf_ok = $true
 			break
 		}
@@ -184,7 +209,7 @@ function Output {
 	if (-not [string]::IsNullOrWhiteSpace($pattern)) {
 		$old_hits = $global:hits
 		if ($index -or ($open -ne 0)){
-			$item | sls $pattern | foreach {
+			$item | sls $pattern -CaseSensitive:$case_sensitive_pattern | foreach {
 				ClearProgress
 				$global:hits += 1
 				echo "[$($global:hits)] $_"
@@ -193,7 +218,7 @@ function Output {
 				}
 			}
 		} else {
-			$item | sls $pattern | foreach {
+			$item | sls $pattern -CaseSensitive:$case_sensitive_pattern | foreach {
 				ClearProgress
 				$global:hits += 1
 				echo "$_"
@@ -326,7 +351,7 @@ for (($i = 0); $i -lt $filters.Length; $i++)
 	$recurse = $recurses[$i]
 	foreach ($p in $paths) {
 		if (Test-Path $p -PathType Leaf) {
-			if ((-not [string]::IsNullOrWhiteSpace($filter)) -and ((split-path -leaf $p) -like $filter)) {
+			if ((-not [string]::IsNullOrWhiteSpace($filter)) -and (&$name_like_operator (split-path -leaf $p) $filter)) {
 				Output($p)
 			}
 		} else {
