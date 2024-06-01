@@ -14,4 +14,4 @@ if ([string]::IsNullOrWhiteSpace($prev_run)) {
 
 $prev_run = $prev_run -replace "^git(.) (.*)", "git $1$2"
 
-Invoke-Expression "python C:\Users\riku.rajaniemi\Documents\KOODAUS\powershell\my_bin\run_and_open.py $open $prev_run"
+Invoke-Expression "python $PSScriptRoot\run_and_open.py $open $prev_run"
